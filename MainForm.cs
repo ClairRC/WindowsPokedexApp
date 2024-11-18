@@ -2,6 +2,15 @@ using PokeApiNet;
 using WindowsPokedexApp.UI;
 using WindowsPokedexApp.UI.bg;
 
+/*
+ * TODO:
+ * Decouple pokemon data from UI elements
+ * Refactor logic and UI classes
+ * Pull sprites from UI instead of locally
+ * Add extra information
+ * Extra sorting options
+ */
+
 namespace WindowsPokedexApp
 {
     /*
@@ -9,19 +18,13 @@ namespace WindowsPokedexApp
      * I've decided to split the UI elements and the event handling in different classes.
      * I felt this class was becoming too spaghetti (as well as the rest of the project..)
      */
-    public partial class MainForm : Form
+    internal partial class MainForm : Form
     {
         //Fields
-        private List<Control> mainUI = new List<Control>(); //List of UI elements
-        private List<PokedexEntry> pokemonList = new List<PokedexEntry>(); //List of ALL pokemon
-        private List<PokedexEntry> matchingPokemon = new List<PokedexEntry>(); //List of matching pokemon
+        private List<Control> mainUI = new List<Control>(); //List of UI 
 
-        private Dictionary<string, PokedexEntry> pokemonMap = new Dictionary<string, PokedexEntry>();
-
-        private PokeApiClient client = new PokeApiClient();
-
-        private int pageNum = 1; //Page number to allow changing pages
-        private int currentSelected = 1; //Keeps track of what pokemon is clicked on
+        private Logic logic;
+        private FormController controller;
 
         //Instntiate UI Elements
         //I put this here so I could have a global reference to them.
@@ -33,6 +36,10 @@ namespace WindowsPokedexApp
         private List<PokemonNameCard> pokemonNameCards = new List<PokemonNameCard>(); //List of just the Pokemon containers
         private PokemonSearch sb = new PokemonSearch();
         private TextBox infoBox = new TextBox();
+
+        //Event handling stuff
+        public event EventHandler<PageChangeEventArgs> PageChanged;
+        public event EventHandler InitialLoad; //Event for when UI gets loaded the first time to get everything in place
 
         public MainForm()
         {
@@ -48,14 +55,12 @@ namespace WindowsPokedexApp
              * make this better in the future.
              */
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
+            
+            logic = new Logic();
+            controller = new FormController(this, logic);
 
-            await DataHandler.GetPokedexEntries(client, pokemonList, pokemonMap);
-
-            for (int i = 0; i < pokemonList.Count; i++)
-            {
-                //Matchin pokemon defaults to everything.
-                matchingPokemon.Add(pokemonList[i]);
-            }
+            controller.WireEvents();
+            await logic.InitializeData();
             buildUI();
         }
 
@@ -70,69 +75,81 @@ namespace WindowsPokedexApp
         {
             if (sender is LeftArrow)
             {
-                //Loops pageNum if needed
-                if (--pageNum <= 0)
-                    pageNum = (matchingPokemon.Count / 5) + 1;
-
-                Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
+                //Page change even for Logic update
+                PageChanged.Invoke(this, new PageChangeEventArgs(-1));
             }
 
             if(sender is RightArrow)
             {
-                if (++pageNum >= (matchingPokemon.Count / 5) + 2)
-                    pageNum = 1;
-
-                Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
+                PageChanged.Invoke(this, new PageChangeEventArgs(1));
             }
         }
 
-        //This is called when the card is clicked on
-        private void PokemonNameCard_OnClick (object sender, EventArgs e)
-        {
-            //Return if the object clicked is already selected
-            if (((PokemonNameCard)sender).IsSelected || ((PokemonNameCard)sender).Pokemon == null) 
-            {
-                return;
-            }
-            else
-            {
-                currentSelected = ((PokemonNameCard)sender).Pokemon.Id;
-                Logic.UpdateInfoBox(pokemonList[currentSelected-1], bgBox, infoBox); //Needs pokemon and Controls to be updated
-                Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
-            }
-        }
-
-        //This gets the string from the serach bar and executes the linq query
-        private void SearchBar_UpdateInput(string input)
-        {
-            var lq =
-                from name in pokemonMap.Keys
-                where name.StartsWith(input.ToLower())
-                select pokemonMap[name];
-
-            matchingPokemon = lq.ToList();
-            pageNum = 1;
-            Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
-        }
 
         //This will scroll the Cards or whatever when the scroll wheel gets scrolled
-        private void OnScroll(object sender, MouseEventArgs e)
+        public void OnScroll(object sender, MouseEventArgs e)
         {
-            if (e.Delta > 0)
+            if (e.Delta/10 > 0)
             {
-                if (++pageNum >= (matchingPokemon.Count / 5) + 2)
-                    pageNum = 1;
-
-                Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
+                PageChanged.Invoke(this, new PageChangeEventArgs(1));
             }
 
-            else if (e.Delta < 0)
+            else if (e.Delta/10 < 0)
             {
-                if (--pageNum <= 0)
-                    pageNum = (matchingPokemon.Count / 5) + 1;
-
-                Logic.UpdateNameCards(matchingPokemon, pokemonNameCards, pageNum, currentSelected);
+                PageChanged.Invoke(this, new PageChangeEventArgs(-1));
             }
+        }
+
+        //Updates cards with the given information.
+        public void UpdateNameCards(object? sender, PageInfoUpdateEventArgs e)
+        {
+            for (int i = 0; i < FormController.NUM_POKEMON_PER_PAGE; i++)
+            {
+                //Updates pokemon if pokemon list isn't null
+                if(e.NewPokemon != null)
+                    pokemonNameCards[i].Pokemon = e.NewPokemon[i];
+
+                //If pokemon is not null AND is selected, then it gets marked as selected
+                if (pokemonNameCards[i].Pokemon != null && pokemonNameCards[i].Pokemon.Id == e.CurrentSelectedPokemon)
+                    pokemonNameCards[i].IsSelected = true;
+
+                else
+                    pokemonNameCards[i].IsSelected = false;
+
+                pokemonNameCards[i].Invalidate();
+            }
+        }
+
+        //Updates the part of the layout that gives info.
+        //This is done when the cards get clicked on.
+        public void UpdateInfoBox(object sender, PokedexEntryEventArgs e)
+        {
+            bgBox.Entry = e.Pokemon;
+            int totalStats = 0;
+
+            foreach (PokemonStat stat in e.Pokemon.Stats)
+            {
+                totalStats += stat.BaseStat;
+            }
+
+            string[] lines =
+            {
+                "Height: " + e.Pokemon.Pkmn.Height/10.0 + "m",
+                "Weight: " + e.Pokemon.Pkmn.Weight/10.0 + "kg",
+                "",
+                "HP: " + e.Pokemon.Pkmn.Stats[0].BaseStat,
+                "Attack: " + e.Pokemon.Pkmn.Stats[1].BaseStat,
+                "Defense: " + e.Pokemon.Pkmn.Stats[2].BaseStat,
+                "Sp. Atk: " + e.Pokemon.Pkmn.Stats[3].BaseStat,
+                "Sp. Def: " + e.Pokemon.Pkmn.Stats[4].BaseStat,
+                "Speed: " + e.Pokemon.Pkmn.Stats[5].BaseStat,
+                "Total: " + totalStats
+            };
+
+            infoBox.Lines = lines;
+
+            bgBox.Invalidate();
+            infoBox.Invalidate();
         }
 
         //Method that places all the UI elements for the first time
@@ -183,14 +200,14 @@ namespace WindowsPokedexApp
             {
                 Point locationToPlace = new Point(this.Width / 2, this.Height / 10 + (i * this.Height / 8));
                 Size size = new Size(this.Width / 2, this.Height / 10);
-                PokemonNameCard newCard = new PokemonNameCard(pokemonList[i]);
+                PokemonNameCard newCard = new PokemonNameCard();
 
                 if (i == 0)
                     newCard.IsSelected = true;
 
                 newCard.Location = locationToPlace;
                 newCard.Size = size;
-                newCard.Click += PokemonNameCard_OnClick;
+                newCard.PokemonContainerClick += logic.PokemonNameCard_OnClick;
 
                 pokemonNameCards.Add(newCard);
                 mainUI.Add(newCard);
@@ -204,7 +221,7 @@ namespace WindowsPokedexApp
             sb.FontColor = Color.White;
             sb.Location = new Point(0, 5 * this.Height / 6);
             sb.Size = new Size(this.Width / 3, this.Height / 6);
-            sb.UpdateInput += SearchBar_UpdateInput;
+            sb.UpdateInput += logic.SearchBar_UpdateInput;
             mainUI.Add(sb);
             Controls.Add(sb);
             sb.BringToFront();
@@ -224,7 +241,8 @@ namespace WindowsPokedexApp
             Controls.Add(infoBox);
             infoBox.BringToFront();
 
-            Logic.UpdateInfoBox(pokemonList[0], bgBox, infoBox); //Sets the information and sprite
+            PageChanged.Invoke(this, new PageChangeEventArgs(0)); //Sets the information and sprite
+            InitialLoad.Invoke(this, new EventArgs()); //Initial load event
         }
 
         //Rebuilds UI when window is resized

@@ -40,8 +40,14 @@ namespace WindowsPokedexApp.UI
 
         private Font textFont = new Font("Segoe UI", 18);
 
+        //Click event
+        public event EventHandler<PokedexEntryEventArgs> PokemonContainerClick;
+
         //Default constructor
-        public PokemonNameCard(PokedexEntry? pokemon) { Pokemon = pokemon; this.DoubleBuffered = true; }
+        public PokemonNameCard() { this.DoubleBuffered = true; this.Click += OnClick; }
+
+        //Contructor
+        public PokemonNameCard(PokedexEntry? pokemon) { Pokemon = pokemon; this.DoubleBuffered = true; this.Click += OnClick; }
 
         //OnPaint function
         protected override void OnPaint(PaintEventArgs e)
@@ -134,6 +140,14 @@ namespace WindowsPokedexApp.UI
             {
                 g.FillPolygon(brush, points);
             }
+        }
+
+        //On click, fire event that gives the Pokemon contained here.
+        //I'm sure I could do this with the normal click event, but I need more specific information
+        //So I'm using a new event as a middle-man kinda thing.
+        public void OnClick(object? sender, EventArgs? e)
+        {
+            PokemonContainerClick.Invoke(this, new PokedexEntryEventArgs(Pokemon));
         }
     }
 }
