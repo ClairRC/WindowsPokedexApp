@@ -10,6 +10,9 @@ namespace WindowsPokedexApp.UI.bg
     
     /*
      * This class is for basically the area to place the Pokemon sprite and provide variety.
+     * CURRENTLY this background is what holds the image of the pokemon to be drawn in the back.
+     * This is really bad, and I am aware of it. I am going to keep it as is for now, but this is definitely 
+     * next on the chopping block for things to fix.
      */
     internal class BackgroundBox : UserControl
     {
@@ -21,7 +24,7 @@ namespace WindowsPokedexApp.UI.bg
         private Color frontBox = Color.FromArgb(255, 72, 74, 69);
 
         //Default constructor
-        public BackgroundBox(PokedexEntry? entry) { this.Entry = entry;  }
+        public BackgroundBox(PokedexEntry? entry) { this.Entry = entry; this.DoubleBuffered = true; }
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -39,8 +42,8 @@ namespace WindowsPokedexApp.UI.bg
                 g.FillRectangle(brush, rect);
             }
 
-            //If entry exists.
-            if (Entry != null)
+            //If entry and its sprite exists.
+            if (Entry != null && Entry.Sprite != null)
             {
                 //Place Pokemon image
                 Rectangle imgRect = new Rectangle(

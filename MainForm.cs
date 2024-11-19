@@ -2,29 +2,20 @@ using PokeApiNet;
 using WindowsPokedexApp.UI;
 using WindowsPokedexApp.UI.bg;
 
-/*
- * TODO:
- * Decouple pokemon data from UI elements
- * Refactor logic and UI classes
- * Pull sprites from UI instead of locally
- * Add extra information
- * Extra sorting options
- */
-
 namespace WindowsPokedexApp
 {
     /*
      * Main form that holds the UI
-     * I've decided to split the UI elements and the event handling in different classes.
-     * I felt this class was becoming too spaghetti (as well as the rest of the project..)
      */
     internal partial class MainForm : Form
     {
-        //Fields
+        //UI List to update if needed
         private List<Control> mainUI = new List<Control>(); //List of UI 
 
+        //Logic, FormControll, and DataHandler instances to link everything together
         private Logic logic;
         private FormController controller;
+        private DataHandler handler;
 
         //Instntiate UI Elements
         //I put this here so I could have a global reference to them.
@@ -37,37 +28,32 @@ namespace WindowsPokedexApp
         private PokemonSearch sb = new PokemonSearch();
         private TextBox infoBox = new TextBox();
 
-        //Event handling stuff
+        //Events
         public event EventHandler<PageChangeEventArgs> PageChanged;
         public event EventHandler InitialLoad; //Event for when UI gets loaded the first time to get everything in place
 
+        //Constructor
         public MainForm()
         {
             InitializeComponent();
         }
 
+        //Everything gets initialized when this gets loaded
         private async void MainForm_Load(object sender, EventArgs e)
         {
             /*
-             * I do have logic for resizing, but it does require the UI to be
-             * completely rebuilt currently, and lining it all up was quite
-             * annoying, so for now I am keeping this unable to be resized, but I may
-             * make this better in the future.
+             * I initially included funcionality for resizing the windows, but lining things up was hard
+             * and it was inefficient, so for the time being I am keeping this as a fixed window size.
              */
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
-            
+
+            handler = new DataHandler();
             logic = new Logic();
-            controller = new FormController(this, logic);
+            controller = new FormController(this, logic, handler);
 
             controller.WireEvents();
-            await logic.InitializeData();
+            logic.InitializeData(handler);
             buildUI();
-        }
-
-        //This is called when the window gets resized
-        private void MainForm_Resize(object sender, EventArgs e)
-        {
-            rebuildUI();
         }
 
         //This is called when one of the arrows gets clicked
@@ -87,21 +73,24 @@ namespace WindowsPokedexApp
 
 
         //This will scroll the Cards or whatever when the scroll wheel gets scrolled
-        public void OnScroll(object sender, MouseEventArgs e)
+        public async void OnMouseScroll(object sender, MouseEventArgs e)
         {
-            if (e.Delta/10 > 0)
+            if (e.Delta/2 > 0)
             {
                 PageChanged.Invoke(this, new PageChangeEventArgs(1));
             }
 
-            else if (e.Delta/10 < 0)
+            else if (e.Delta/2 < 0)
             {
                 PageChanged.Invoke(this, new PageChangeEventArgs(-1));
             }
         }
 
-        //Updates cards with the given information.
-        public void UpdateNameCards(object? sender, PageInfoUpdateEventArgs e)
+        //Updates cards with updated pokemon list
+        //If the list isn't updated, it only worries about updating which card is highlighted
+        //Debatably I should have put these in separate methods, but since the functions would be
+        //Essentially the same, I decided one was okay for now.
+        public void UpdateNameCards(object? sender, UpdateDisplayedPokemonEventArgs e)
         {
             for (int i = 0; i < FormController.NUM_POKEMON_PER_PAGE; i++)
             {
@@ -122,7 +111,7 @@ namespace WindowsPokedexApp
 
         //Updates the part of the layout that gives info.
         //This is done when the cards get clicked on.
-        public void UpdateInfoBox(object sender, PokedexEntryEventArgs e)
+        public void UpdateInfoBox(object sender, UpdateSelectedPokemonEventArgs e)
         {
             bgBox.Entry = e.Pokemon;
             int totalStats = 0;
@@ -156,7 +145,7 @@ namespace WindowsPokedexApp
         private void buildUI()
         {
             //Adds scroll event to allow scrolling through entries
-            this.MouseWheel += OnScroll;
+            this.MouseWheel += OnMouseScroll;
 
             //Add background
             bg.Location = new Point(0, 0);
@@ -243,33 +232,6 @@ namespace WindowsPokedexApp
 
             PageChanged.Invoke(this, new PageChangeEventArgs(0)); //Sets the information and sprite
             InitialLoad.Invoke(this, new EventArgs()); //Initial load event
-        }
-
-        //Rebuilds UI when window is resized
-
-        /*
-         * Okay so like off the record I know this is a really bad way to do this, because whenever the 
-         * window is resized, it removes the control and then recreates it.
-         * I tried OH HOW I TRIED to do this better. I created a wrapper class to hold the size and width,
-         * but then the problem became updating THAT, and I tried using delegates to pass in a function to do that,
-         * and that ALMOST worked, but when I added stuff in that for loop, they would all be put into the same
-         * location when it got resized. I am SURE that there is a way to do this. HOWEVER there are not very many UI
-         * elements that need to be updated. Currently I am
-         * not going to worry about this since I am not allowing for it to
-         * be resized normally, so FOR NOW I am going to keep it this way. In the 
-         * future I will attempt to make this better if i make this app resizeable.
-         * I am going to keep it here though just in case.
-         */
-        private void rebuildUI()
-        {
-            foreach (Control control in mainUI)
-            {
-                Controls.Remove(control);
-            }
-
-            mainUI.Clear();
-            pokemonNameCards.Clear();
-            buildUI();
         }
     }
 }

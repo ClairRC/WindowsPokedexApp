@@ -41,7 +41,6 @@ namespace WindowsPokedexApp
             Name = "MainForm";
             Text = "Windows Pokedex App";
             Load += MainForm_Load;
-            Resize += MainForm_Resize;
             ResumeLayout(false);
         }
 

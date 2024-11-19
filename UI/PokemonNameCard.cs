@@ -41,7 +41,7 @@ namespace WindowsPokedexApp.UI
         private Font textFont = new Font("Segoe UI", 18);
 
         //Click event
-        public event EventHandler<PokedexEntryEventArgs> PokemonContainerClick;
+        public event EventHandler<UpdateSelectedPokemonEventArgs> PokemonContainerClick;
 
         //Default constructor
         public PokemonNameCard() { this.DoubleBuffered = true; this.Click += OnClick; }
@@ -104,15 +104,19 @@ namespace WindowsPokedexApp.UI
             //Only if pokemon is not null, draw the sprite and info.
             if (Pokemon != null)
             {
-                //Place Pokemon images and stuff
-                Rectangle imgRect = new Rectangle(
-                    5,
-                    -3,
-                    this.Height * Pokemon.Sprite.Width / 80,
-                    this.Height * Pokemon.Sprite.Width / 80
-                );
+                //Only draw sprite if it's not null
+                if (Pokemon.Sprite != null)
+                {
+                    //Place Pokemon images and stuff
+                    Rectangle imgRect = new Rectangle(
+                        5,
+                        -3,
+                        this.Height * Pokemon.Sprite.Width / 80,
+                        this.Height * Pokemon.Sprite.Width / 80
+                    );
 
-                g.DrawImage(Pokemon.Sprite, imgRect);
+                    g.DrawImage(Pokemon.Sprite, imgRect);
+                }
 
                 //Pokemon Info
                 using (Brush brush = new SolidBrush(fontColor))
@@ -147,7 +151,7 @@ namespace WindowsPokedexApp.UI
         //So I'm using a new event as a middle-man kinda thing.
         public void OnClick(object? sender, EventArgs? e)
         {
-            PokemonContainerClick.Invoke(this, new PokedexEntryEventArgs(Pokemon));
+            PokemonContainerClick.Invoke(this, new UpdateSelectedPokemonEventArgs(Pokemon));
         }
     }
 }
